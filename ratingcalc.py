@@ -6,7 +6,7 @@ from scipy.signal import correlate
 
 
 MINR = -500
-MAXR = 4500
+MAXR = 6000
 N = MAXR - MINR + 1
 
 
