@@ -67,4 +67,25 @@ class CFEngineCheap:
             player.rating = round(player.rating)
 
 
+@dataclass
+class CFEngineExpensive:
+
+    def inference(self, state: list[Player]) -> None:
+        sum_delta = 0.0
+        for actual_place, player in enumerate(state):
+            # Excluding ourselves
+            cont_ratings = [int(p.rating) for i, p in enumerate(state) if i != actual_place]
+            perfs = calcperf(cont_ratings)
+            expect_place = perfs[int(player.rating)]
+            geomean_placing = math.sqrt((actual_place+1) * (expect_place+1)) - 1
+            perf_for_delta = binsearch(perfs, geomean_placing)
+            delta: float = (perf_for_delta - player.rating) / 2
+            player.rating += delta
+            sum_delta += delta
+        for player in state:
+            player.rating -= sum_delta / len(state)  # normalize to adjust for inflation
+            player.rating = round(player.rating)
+
+
 cf_engine_cheap = CFEngineCheap()
+cf_engine_expensive = CFEngineExpensive()
