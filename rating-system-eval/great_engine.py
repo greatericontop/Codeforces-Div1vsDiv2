@@ -14,8 +14,14 @@ ROOT2PI = math.sqrt(2 * math.pi)
 
 
 def sigmoid(x: float) -> float:
-    """Sigmoid function in units of rating"""
+    """Sigmoid win/lose probability function in units of rating"""
     return 1 / (1 + math.exp(-x/173.7178))
+
+
+def sigmoid_g(x: float, opponent_rd: float) -> float:
+    """Sigmoid win/lose probability function, adjusted by opponent's RD"""
+    g = math.sqrt(173.7178**2 + math.pi/8 * opponent_rd**2)
+    return 1 / (1 + math.exp(-x/g))
 
 
 def npdf(x: float, mu: float, sigma: float) -> float:
@@ -37,7 +43,7 @@ class HeliosEngine:
     # new rd = (slow_dev) old_rd + (1-slow_dev) new_rd
     slow_dev: float = 0.0
 
-    def compute_likelihoods(self, ratings: list[float]) -> dict[float, np.ndarray]:
+    def compute_likelihoods(self, ratings: list[tuple[float, float]]) -> dict[float, np.ndarray]:
         """Given the ratings of the field, calculate a dict[rating, likelihood polynomial] using genfunc
         The i'th coefficient of the resulting polynomial is the likelihood of placing i'th (0 based)
         """
@@ -46,8 +52,8 @@ class HeliosEngine:
         y = self.MIN_RATING
         while y <= self.MAX_RATING:
             polys = []
-            for r in ratings:
-                p_lose = sigmoid(r - y)
+            for r, rd in ratings:
+                p_lose = sigmoid_g(r - y, rd)
                 # win is x^0, lose is x^1
                 polys.append(np.array([1-p_lose, p_lose]))
             a = multiply(polys)
@@ -71,9 +77,15 @@ class HeliosEngine:
             likelihood = float((likelihoods[y][place] + likelihoods[y][place+1]) / 2)
             posterior[y] = prior_density * likelihood
             y += self.STEP
-        integ = max(sum(posterior.values()) * self.STEP, 0.000001)
+        integ = sum(posterior.values()) * self.STEP
+        assert integ >= 0, 'Integral must be nonnegative'
+        assert integ > 0, 'Zero integral is bad!'
+        if integ <= 1e-15:
+            print(f'warning: integral of unnormalized posterior is quite small: {integ}')
         for y in posterior:
             posterior[y] /= integ
+        new_density_sum = sum(posterior.values()) * self.STEP
+        assert abs(new_density_sum - 1) < 1e-4, f'Posterior density does not integrate to 1 (after multiplying by STEP), got {new_density_sum}'
         # Moment matching
         mu_new = sum(y * density for y, density in posterior.items()) * self.STEP
         var_new = sum((y-mu_new)**2 * density for y, density in posterior.items()) * self.STEP
@@ -84,57 +96,34 @@ class HeliosEngine:
         """Performs an update, assuming the players are sorted with the winner in index 0.
         Modifies the inputted list of players in-place.
         """
-        likelihoods = self.compute_likelihoods([p.rating for p in players])
+        for player in players:
+            if self.use_fixed_rd is not None:
+                player.rd = self.use_fixed_rd
+        likelihoods = self.compute_likelihoods([(p.rating, p.rd) for p in players])
         for i, player in enumerate(players):
-            new_rating, new_rd = self.update_player(player.rating, self.use_fixed_rd if self.use_fixed_rd is not None else player.rd, likelihoods, i)
+            new_rating, new_rd = self.update_player(player.rating, player.rd, likelihoods, i)
             player.rating = new_rating
             player.rd = max(self.slow_dev*player.rd + (1-self.slow_dev)*new_rd, self.min_rd)
+            if self.use_fixed_rd is not None:
+                player.rd = self.use_fixed_rd
+
+
 
 
 # my cringe attempt at making an AI model sounding name lol
 # assume user ratings range from 0 to 4000
 #helios_lite_1_eco = HeliosEngine(MIN_RATING=-1000, MAX_RATING=5000, STEP=10, use_fixed_rd=90)
-helios_1_eco = HeliosEngine(MIN_RATING=-1000, MAX_RATING=5000, STEP=10)
+#helios_1_eco = HeliosEngine(MIN_RATING=-1000, MAX_RATING=5000, STEP=10)
 #helios_lite_1_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, use_fixed_rd=90)
-helios_1_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5)
-#helios_1_hce70_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=70)
-#helios_1_hce60_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=60)
-#helios_1_hce50_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=50)
-#helios_1_hce50slowdev15_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=50, slow_dev=0.15)
-#helios_1_hce50slowdev30_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=50, slow_dev=0.3)
-#helios_1_hce50slowdev45_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=50, slow_dev=0.45)
-#helios_1_hce40_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, min_rd=40)
-helios_1_high = HeliosEngine(MIN_RATING=-2000, MAX_RATING=6000, STEP=2.5)
+#helios_1_high = HeliosEngine(MIN_RATING=-2000, MAX_RATING=6000, STEP=2.5)
 #helios_1_max = HeliosEngine(MIN_RATING=-4000, MAX_RATING=8000, STEP=0.05)
 
 
+helios_1_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5)
+
+# 15 seems to be best, 0 and 30 are roughly equal, 45 is much worse
+helios_1_slowdev15_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.15)
+#helios_1_slowdev30_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.3)
+#helios_1_slowdev45_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.45)
 
 
-
-
-
-# For testing/tuning
-if __name__ == '__main__':
-    def main():
-        combos = [
-            (600, 2800, 2, '400 dynamic range, low precision'),
-            (400, 3000, 2, '600 dynamic range, low precision'),
-            (200, 3200, 2, '800 dynamic range, low precision'),
-            (200, 3200, 1, '800 dynamic range, medium precision'),
-            (-1000, 4400, 0.02, 'ground truth'),
-        ]
-        for combo in combos:
-            print(combo[3])
-            engine = HeliosEngine(MIN_RATING=combo[0], MAX_RATING=combo[1], STEP=combo[2])
-            likelihoods = engine.compute_likelihoods([1100, 1130, 1200])
-            players = [
-                (1000, 150),
-                (1300, 150),
-                (2400, 150),
-                (2400, 350),
-            ]
-            for player in players:
-                new_rating, new_rd = engine.update_player(player[0], player[1], likelihoods, 0)
-                print(f'Player ({player[0]}, rd={player[1]})  ->  ({new_rating}, rd={new_rd}) from winning')
-            print()
-    main()
