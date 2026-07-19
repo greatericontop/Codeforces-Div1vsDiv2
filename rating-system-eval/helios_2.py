@@ -61,7 +61,7 @@ def _compute_likelihoods(ratings: list[float], rds: list[float],
     return prefix_pro, suffix_pro
 
 
-@numba.jit(fastmath=True)
+#@numba.jit(fastmath=True)
 def _update_player(rating: float, rd: float, place: int,
                    prefix_products: np.ndarray, suffix_products: np.ndarray,
                    MIN_RATING: float, STEP: float
@@ -97,6 +97,7 @@ def _update_player(rating: float, rd: float, place: int,
         raise RuntimeError('fft not implemented yet')
         #truerating_likelihoods = correlate(padded, filter, mode='valid')
     else:
+        #truerating_likelihoods = correlate(padded, filter, mode='valid')
         truerating_likelihoods = np.correlate(padded, filter, mode='valid')
     assert truerating_likelihoods.shape == (m,)
     #print('truerating_likelihoods: ', truerating_likelihoods)
