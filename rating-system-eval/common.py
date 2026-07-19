@@ -15,3 +15,4 @@ class Player:
         # Actually higher numbers are better to not have it exponentially drop off toward 0
         shares = math.exp((self.real_rating - 1200.0) / 173.7178)
         self.random_roll = random.random() ** (1/shares)
+        #self.random_roll = random.normalvariate(self.real_rating, 299.6/math.sqrt(2))

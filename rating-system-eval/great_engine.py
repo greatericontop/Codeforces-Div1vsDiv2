@@ -119,10 +119,10 @@ class HeliosEngine:
 #helios_1_max = HeliosEngine(MIN_RATING=-4000, MAX_RATING=8000, STEP=0.05)
 
 
-helios_1_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5)
+#helios_1_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5)
 
 # 0 to 30 seems to be good range? would want to benchmark more
-helios_1_slowdev15_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.15)
+#helios_1_slowdev15_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.15)
 #helios_1_slowdev30_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.3)
 #helios_1_slowdev45_medium = HeliosEngine(MIN_RATING=-1500, MAX_RATING=5500, STEP=5, slow_dev=0.45)
 
