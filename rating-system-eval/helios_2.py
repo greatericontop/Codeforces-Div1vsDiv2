@@ -61,15 +61,11 @@ def _compute_likelihoods(ratings: list[float], rds: list[float],
     return prefix_pro, suffix_pro
 
 
-#@numba.jit(fastmath=True)
-def _update_player(rating: float, rd: float, place: int,
-                   prefix_products: np.ndarray, suffix_products: np.ndarray,
-                   MIN_RATING: float, STEP: float
-                   ) -> tuple[float, float]:
-    """
-    Return new rating and RD of player.
-    Time complexity: O(m log m) per player (due to FFT)
-    """
+@numba.jit(fastmath=True)
+def _update_player_initial(rating: float, rd: float, place: int,
+                           prefix_products: np.ndarray, suffix_products: np.ndarray,
+                           MIN_RATING: float, STEP: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return filter and padded perf likelihoods"""
     m, n = prefix_products.shape
     # For each perf (m of them), calculate the actual likelihood (prefix sum of loss, suffix sum of win)
     perf_likelihoods = np.empty(m, dtype=np.float64)
@@ -93,15 +89,13 @@ def _update_player(rating: float, rd: float, place: int,
         filter[i] = npdf(r_diff / BETA)
     padded = np.zeros(3*m, dtype=np.float64)
     padded[m:2*m] = perf_likelihoods
-    if m >= 3000:
-        raise RuntimeError('fft not implemented yet')
-        #truerating_likelihoods = correlate(padded, filter, mode='valid')
-    else:
-        #truerating_likelihoods = correlate(padded, filter, mode='valid')
-        truerating_likelihoods = np.correlate(padded, filter, mode='valid')
-    assert truerating_likelihoods.shape == (m,)
-    #print('truerating_likelihoods: ', truerating_likelihoods)
+    return filter, padded
 
+
+@numba.jit(fastmath=True)
+def _update_player_posterior(filter: np.ndarray, truerating_likelihoods: np.ndarray, rating: float, rd: float, MIN_RATING: float, STEP: float) -> tuple[float, float]:
+    """Perform MAP posterior update step with true rating likelihoods. Return the results"""
+    m = truerating_likelihoods.shape[0]
     # Create the new distribution
     # Prior(=probability of x under rating, rd) * Likelihood(=probability of x from truerating_likelihood)
     posterior = np.empty(m, dtype=np.float64)
@@ -116,6 +110,19 @@ def _update_player(rating: float, rd: float, place: int,
     mu_new = np.sum(x * posterior) * STEP
     var_new = np.sum((x-mu_new)**2 * posterior) * STEP
     return mu_new, math.sqrt(var_new)
+
+
+def _update_player(rating: float, rd: float, place: int,
+                   prefix_products: np.ndarray, suffix_products: np.ndarray,
+                   MIN_RATING: float, STEP: float
+                   ) -> tuple[float, float]:
+    """
+    Return new rating and RD of player.
+    Time complexity: O(m log m) per player (due to FFT)
+    """
+    filter, padded = _update_player_initial(rating, rd, place, prefix_products, suffix_products, MIN_RATING, STEP)
+    truerating_likelihoods = correlate(padded, filter, mode='valid', method='auto')
+    return _update_player_posterior(filter, truerating_likelihoods, rating, rd, MIN_RATING, STEP)
 
 
 @dataclass
@@ -141,6 +148,9 @@ class Helios2:
             player.rd = new_rd
 
 
+helios_2_eco = Helios2(MIN_RATING=-1000, MAX_RATING=5000, STEP=10)
+#helios_2_eco_hdr = Helios2(MIN_RATING=-2000, MAX_RATING=6000, STEP=10)
 helios_2_medium = Helios2(MIN_RATING=-1000, MAX_RATING=5000, STEP=5)
-helios_2_medium_hdr = Helios2(MIN_RATING=-2000, MAX_RATING=6000, STEP=5)
-helios_2_medium_extrahdr = Helios2(MIN_RATING=-3000, MAX_RATING=7000, STEP=5)
+#helios_2_medium_hdr = Helios2(MIN_RATING=-2000, MAX_RATING=6000, STEP=5)
+#helios_2_high = Helios2(MIN_RATING=-1000, MAX_RATING=5000, STEP=2.5)
+#helios_2_high_hdr = Helios2(MIN_RATING=-2000, MAX_RATING=6000, STEP=2.5)
